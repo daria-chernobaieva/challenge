@@ -1,7 +1,8 @@
 from django.contrib.auth import authenticate
 from django.conf import settings
 from django.middleware import csrf
-from rest_framework import exceptions as rest_exceptions, response, decorators as rest_decorators, permissions as rest_permissions
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, OpenApiTypes, extend_schema
+from rest_framework import exceptions as rest_exceptions, response, decorators as rest_decorators, permissions as rest_permissions, status
 from rest_framework_simplejwt import tokens, views as jwt_views, serializers as jwt_serializers, exceptions as jwt_exceptions
 from user import serializers, models
 import stripe
@@ -25,6 +26,51 @@ def get_user_tokens(user):
     }
 
 
+@extend_schema(
+    summary='User Login',
+    auth=[],
+    request=serializers.LoginSerializer,
+    responses={
+        200: OpenApiResponse(response=None, description='Successful authentication'),
+        400: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Validation errors'),
+        401: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Authentication failure'),
+    },
+    examples=[
+        OpenApiExample(
+            'OK',
+            value={
+                'email': 'john.doe@test.com',
+                'password': 'test_password',
+            },
+            request_only=True,
+        ),
+        OpenApiExample(
+            'Invalid email',
+            value={
+                'email': ['Enter a valid email address.'],
+            },
+            response_only=True,
+            status_codes=[status.HTTP_400_BAD_REQUEST],
+        ),
+        OpenApiExample(
+            'Field may not be blank',
+            value={
+                'password': ['This field may not be blank.'],
+                'email': ['This field may not be blank.'],
+            },
+            response_only=True,
+            status_codes=[status.HTTP_400_BAD_REQUEST],
+        ),
+        OpenApiExample(
+            'Incorrect email and/or password',
+            value={
+                'detail': 'Email or Password is incorrect!',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_401_UNAUTHORIZED],
+        ),
+    ],
+)
 @rest_decorators.api_view(["POST"])
 @rest_decorators.permission_classes([])
 def loginView(request):
@@ -64,6 +110,81 @@ def loginView(request):
         "Email or Password is incorrect!")
 
 
+@extend_schema(
+    summary='User Registration',
+    auth=[],
+    request=serializers.RegistrationSerializer,
+    responses={
+        200: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Successful registration'),
+        400: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Validation errors'),
+        401: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Authentication failure'),
+    },
+    examples=[
+        OpenApiExample(
+            'OK',
+            value={
+                'first_name': 'John',
+                'last_name': 'Doe',
+                'email': 'john.doe@test.com',
+                'password': 'test_password',
+                'password2': 'test_password',
+            },
+            request_only=True,
+        ),
+        OpenApiExample(
+            'Success',
+            value='Registered!',
+            response_only=True,
+            status_codes=[status.HTTP_200_OK],
+        ),
+        OpenApiExample(
+            'Invalid email',
+            value={
+                'email': ['Enter a valid email address.'],
+            },
+            response_only=True,
+            status_codes=[status.HTTP_400_BAD_REQUEST],
+        ),
+        OpenApiExample(
+            'Max length restriction',
+            value={
+                'first_name': 'Ensure this field has no more than 50 characters.',
+                'last_name': 'Ensure this field has no more than 50 characters.',
+                'password': 'Ensure this field has no more than 128 characters.',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_400_BAD_REQUEST],
+        ),
+        OpenApiExample(
+            'Field may not be blank',
+            value={
+                'first_name': ['This field may not be blank.'],
+                'last_name': ['This field may not be blank.'],
+                'email': ['This field may not be blank.'],
+                'password': ['This field may not be blank.'],
+                'password2': ['This field may not be blank.'],
+            },
+            response_only=True,
+            status_codes=[status.HTTP_400_BAD_REQUEST],
+        ),
+        OpenApiExample(
+            'Passwords mismatch',
+            value={
+                'password': 'Passwords do not match!',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_400_BAD_REQUEST],
+        ),
+        OpenApiExample(
+            'Invalid credentials',
+            value={
+                'detail': 'Invalid credentials!',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_401_UNAUTHORIZED],
+        ),
+    ],
+)
 @rest_decorators.api_view(["POST"])
 @rest_decorators.permission_classes([])
 def registerView(request):
@@ -77,9 +198,36 @@ def registerView(request):
     return rest_exceptions.AuthenticationFailed("Invalid credentials!")
 
 
+@extend_schema(
+    summary='User Logout',
+    request=None,
+    responses={
+        200: OpenApiResponse(response=None, description='Successful logout'),
+        400: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Validation errors'),
+        403: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Permission denied'),
+    },
+    examples=[
+        OpenApiExample(
+            'Invalid token',
+            value={
+                'detail': 'Invalid token',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_400_BAD_REQUEST],
+        ),
+        OpenApiExample(
+            'Permission denied: user is not authenticated',
+            value={
+                'detail': 'Forbidden',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_403_FORBIDDEN],
+        ),
+    ],
+)
 @rest_decorators.api_view(['POST'])
 @rest_decorators.permission_classes([rest_permissions.IsAuthenticated])
-def logoutView(request):
+def logoutView(request):    
     try:
         refreshToken = request.COOKIES.get(
             settings.SIMPLE_JWT['AUTH_COOKIE_REFRESH'])
@@ -110,6 +258,32 @@ class CookieTokenRefreshSerializer(jwt_serializers.TokenRefreshSerializer):
                 'No valid token found in cookie \'refresh\'')
 
 
+@extend_schema(
+    summary='Token Refresh',
+    request=None,
+    responses={
+        200: CookieTokenRefreshSerializer,
+        401: OpenApiResponse(OpenApiTypes.OBJECT, description='Invalid token')
+    },
+    examples=[
+        OpenApiExample(
+            'No valid token found',
+            value={
+                'detail': 'No valid token found in cookie \'refresh\'',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_401_UNAUTHORIZED],
+        ),
+        OpenApiExample(
+            'General token validation error',
+            value={
+                'detail':'Token is invalid or expired',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_401_UNAUTHORIZED],
+        ),
+    ],
+)
 class CookieTokenRefreshView(jwt_views.TokenRefreshView):
     serializer_class = CookieTokenRefreshSerializer
 
@@ -129,6 +303,45 @@ class CookieTokenRefreshView(jwt_views.TokenRefreshView):
         return super().finalize_response(request, response, *args, **kwargs)
 
 
+@extend_schema(
+    summary='User Info',
+    description='Get details about current authenticated user',
+    responses={
+        200: OpenApiResponse(response=serializers.UserSerializer, description='Success'),
+        403: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Permission denied'),
+        404: OpenApiResponse(response=OpenApiTypes.OBJECT, description='User not found'),
+    },
+    examples=[
+        OpenApiExample(
+            'OK',
+            value={
+                'id': 1,
+                'email': 'john.doe@test.com',
+                'is_staff': True,
+                'first_name': 'John',
+                'last_name': 'Doe',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_200_OK],
+        ),
+        OpenApiExample(
+            'Permission denied: user is not authenticated',
+            value={
+                'detail': 'Forbidden',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_403_FORBIDDEN],
+        ),
+        OpenApiExample(
+            'User not found',
+            value={
+                'detail': 'Not Found',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_404_NOT_FOUND],
+        ),
+    ],
+)
 @rest_decorators.api_view(["GET"])
 @rest_decorators.permission_classes([rest_permissions.IsAuthenticated])
 def user(request):
@@ -141,6 +354,43 @@ def user(request):
     return response.Response(serializer.data)
 
 
+@extend_schema(
+    summary='User\'s subscriptions list',
+    description='Get subscriptions list for current authenticated user',
+    responses={
+        200: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Success'),
+        403: OpenApiResponse(response=OpenApiTypes.OBJECT, description='Permission denied'),
+        404: OpenApiResponse(response=OpenApiTypes.OBJECT, description='User not found'),
+    },
+    examples=[
+        OpenApiExample(
+            'OK',
+            value={
+                'id': 'subscriptiom_1PNyN4KpmwOo10Ma8B30AN2n',
+                'start_date': '2024-06-19',
+                'plan': 'price_1PNyN4KpmwOo10Ma8B30AN2n',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_200_OK],
+        ),
+        OpenApiExample(
+            'Permission denied: user is not authenticated',
+            value={
+                'detail': 'Forbidden',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_403_FORBIDDEN],
+        ),
+        OpenApiExample(
+            'User not found',
+            value={
+                'detail': 'Not Found',
+            },
+            response_only=True,
+            status_codes=[status.HTTP_404_NOT_FOUND],
+        ),
+    ],
+)
 @rest_decorators.api_view(["GET"])
 @rest_decorators.permission_classes([rest_permissions.IsAuthenticated])
 def getSubscriptions(request):

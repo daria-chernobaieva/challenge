@@ -1,5 +1,6 @@
 from rest_framework_simplejwt import authentication as jwt_authentication
 from django.conf import settings
+from drf_spectacular.contrib.rest_framework_simplejwt import SimpleJWTScheme
 from rest_framework import authentication, exceptions as rest_exceptions
 
 
@@ -26,4 +27,8 @@ class CustomAuthentication(jwt_authentication.JWTAuthentication):
         validated_token = self.get_validated_token(raw_token)
         enforce_csrf(request)
         return self.get_user(validated_token), validated_token
-        
+
+
+class CustomAuthenticationScheme(SimpleJWTScheme):
+    target_class = 'user.authenticate.CustomAuthentication'
+    name = 'CustomAuthentication'

@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     
     # Modules
     'corsheaders',
+    'drf_spectacular',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
 
@@ -217,7 +218,20 @@ REST_FRAMEWORK = {
 
     "DEFAULT_PERMISSION_CLASSES": [
         'rest_framework.permissions.AllowAny',
-    ]
+    ],
+    "DEFAULT_SCHEMA_CLASS": 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Challenge API',
+    'DESCRIPTION': 'That is a test API documentation for Challenge project',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    # OTHER SETTINGS
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,
+        'deepLinking': True,
+    },
 }
 
 AUTH_USER_MODEL = 'user.User'
